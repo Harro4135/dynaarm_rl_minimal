@@ -89,7 +89,7 @@ class RL6DPoseControllerCore:
         self,
         model_path: str = DEFAULT_MODEL,
         meta_path: str = DEFAULT_META,
-        xml_path: str = DEFAULT_XML,
+        xml_path: str = os.path.join(SIM_DIR, "models", "ridgeback_duatic_kinematics.xml"),
         residual_gain: float = 0.0,
         control_freq_hz: float = 50.0,
         max_joint_vel: float = 1.5,

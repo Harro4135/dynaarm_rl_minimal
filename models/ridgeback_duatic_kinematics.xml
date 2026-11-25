@@ -1,0 +1,288 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="ridgeback_dynaarm">
+  
+  <compiler angle="radian" meshdir="/home/harrison/Repos" balanceinertia="true" autolimits="true" />
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast" />
+
+  <visual>
+    <global offwidth="1280" offheight="960" />
+    <quality shadowsize="4096" offsamples="4" />
+  </visual>
+
+  <default>
+    <joint damping="0.2" />
+    <geom contype="1" conaffinity="1" friction="0.8 0.1 0.1" />
+    <default class="visual_only">
+      <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" />
+    </default>
+    <default class="collision_mesh">
+      <geom type="mesh" contype="1" conaffinity="1" group="3" density="0" />
+    </default>
+    <default class="2f85_visual">
+      <geom type="mesh" contype="0" conaffinity="0" group="2" density="0" />
+    </default>
+    <default class="2f85_collision">
+      <geom type="mesh" contype="1" conaffinity="1" group="3" density="0" />
+    </default>
+  </default>
+
+  <asset>
+    
+    <texture name="skybox" type="skybox" builtin="gradient" rgb1="0.90 0.93 0.97" rgb2="0.74 0.80 0.88" width="512" height="512" />
+    <texture name="grid_tex" type="2d" builtin="checker" rgb1="0.86 0.88 0.90" rgb2="0.80 0.82 0.85" width="512" height="512" mark="edge" markrgb="0.72 0.75 0.78" />
+    <material name="floor_mat" texture="grid_tex" texrepeat="25 25" texuniform="true" reflectance="0.08" />
+
+    
+    <material name="chassis_mat" rgba="0.15 0.15 0.15 1" />
+    <material name="yellow_mat" rgba="0.8 0.8 0.0 1" />
+    <material name="white_mat" rgba="1.0 1.0 1.0 1" />
+    <material name="red_mat" rgba="1.0 0.0 0.0 1" />
+    <material name="light_grey_mat" rgba="0.8 0.8 0.8 1" />
+    <material name="dark_grey_mat" rgba="0.2 0.2 0.2 1" />
+    <material name="wheel_mat" rgba="0.15 0.15 0.15 1" />
+    <material name="carbon_fiber_mat" rgba="0.792157 0.819608 0.933333 1" />
+    <material name="arm_mat" rgba="0.82 0.84 0.88 1" />
+    <material name="2f85_black" rgba="0.149 0.149 0.149 1" />
+    <material name="2f85_gray" rgba="0.4627 0.4627 0.4627 1" />
+    <material name="payload_mat" rgba="0.2 0.7 0.9 0.85" />
+
+    
+    </asset>
+
+  <worldbody>
+    
+    <geom name="floor" type="plane" size="50 50 0.1" material="floor_mat" contype="1" conaffinity="1" />
+
+    
+    <light directional="true" pos="2 -2 5" dir="-0.3 0.3 -1" diffuse="0.75 0.75 0.78" specular="0.2 0.2 0.2" />
+    <light directional="true" pos="-2 2 4" dir="0.3 -0.3 -1" diffuse="0.40 0.42 0.45" castshadow="false" />
+
+    
+    <body name="ridgeback_base" pos="0 0 0.0759">
+      
+      <joint name="base_x" type="slide" axis="1 0 0" damping="15.0" range="-100 100" />
+      <joint name="base_y" type="slide" axis="0 1 0" damping="15.0" range="-100 100" />
+      <joint name="base_yaw" type="hinge" axis="0 0 1" damping="8.0" range="-3.14159 3.14159" />
+
+      
+      <inertial pos="0.015 0.002 0.075" mass="189.4" diaginertia="4.95 7.65 5.10" />
+
+      
+      <camera name="base_front_cam" pos="0.51 0 0.40" quat="0.6645 0.2418 -0.2418 -0.6645" fovy="58" />
+
+      
+      <geom size="0.2465 0.2465 0.035" pos="0 0 0.255" quat="0.92388 0 0 0.382683" type="box" contype="0" conaffinity="0" group="1" density="0" material="light_grey_mat" />
+      <geom size="0.2465 0.2465 0.035" pos="0 0 0.255" quat="0.92388 0 0 0.382683" type="box" group="3" density="0" material="light_grey_mat" />
+      <geom name="top_plate_col_sph_0" type="sphere" pos="-0.469569 -0.000033 0.750510" size="0.119722" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_1" type="sphere" pos="-0.406572 -0.001581 0.515557" size="0.167488" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_2" type="sphere" pos="0.118930 0.346555 0.346408" size="0.077526" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_3" type="sphere" pos="-0.289494 -0.202456 0.445494" size="0.231307" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_4" type="sphere" pos="-0.250528 -0.244480 0.445485" size="0.231246" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_5" type="sphere" pos="-0.102938 -0.366569 0.376530" size="0.099397" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_6" type="sphere" pos="-0.153630 -0.318471 0.541942" size="0.150245" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_7" type="sphere" pos="-0.248114 -0.077421 0.445499" size="0.224323" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_8" type="sphere" pos="0.118930 0.346367 0.449401" size="0.077071" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_9" type="sphere" pos="0.319410 0.184449 0.449326" size="0.084682" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_10" type="sphere" pos="-0.294681 0.183742 0.444010" size="0.216279" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_11" type="sphere" pos="-0.257529 0.244537 0.445502" size="0.227517" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_12" type="sphere" pos="-0.210844 0.089629 0.445538" size="0.205191" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_13" type="sphere" pos="-0.138933 0.315694 0.534804" size="0.121485" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_14" type="sphere" pos="0.265709 0.178813 0.397504" size="0.143857" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_15" type="sphere" pos="0.311584 0.003169 0.397494" size="0.149351" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_16" type="sphere" pos="0.311694 -0.169554 0.440022" size="0.103350" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_17" type="sphere" pos="0.319410 -0.177924 0.339504" size="0.086371" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_18" type="sphere" pos="-0.161004 0.268610 0.421409" size="0.193344" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_19" type="sphere" pos="0.358737 0.000019 0.374195" size="0.126761" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_20" type="sphere" pos="0.216933 0.000033 0.397318" size="0.165141" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_21" type="sphere" pos="0.068042 -0.042684 0.439978" size="0.113169" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_22" type="sphere" pos="0.058166 -0.044633 0.362002" size="0.109692" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_23" type="sphere" pos="-0.119570 -0.363653 0.762015" size="0.085120" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_24" type="sphere" pos="0.376890 0.000031 0.426466" size="0.111018" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_25" type="sphere" pos="-0.409048 0.008042 0.393908" size="0.166035" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_26" type="sphere" pos="0.052803 0.060408 0.450094" size="0.088859" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_27" type="sphere" pos="0.031106 0.034826 0.368348" size="0.108286" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_28" type="sphere" pos="-0.119570 0.363697 0.811757" size="0.036947" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+      <geom name="top_plate_col_sph_29" type="sphere" pos="-0.119570 0.360073 0.711101" size="0.063608" group="3" rgba="0.8 0.8 0.8 0.0" contype="1" conaffinity="1" />
+
+      
+      <geom size="0.055 0.055 0.01125" pos="0.39543 0 0.40625" type="box" group="3" density="0" material="light_grey_mat" />
+      <geom size="0.0435 0.029175" pos="0.39543 0 0.446675" type="cylinder" group="3" density="0" material="light_grey_mat" />
+      <geom size="0.043395 0.011" pos="0.39543 0 0.48685" type="cylinder" group="3" density="0" material="light_grey_mat" />
+
+      
+      <site name="imu_site" pos="0.2085 -0.2902 0.1681" size="0.02" />
+
+      
+      <body name="front_left_wheel_link" pos="0.319 0.2755 0.05">
+        <inertial pos="0 0 0" quat="0.707107 0 0 0.707107" mass="2.5" diaginertia="0.00720101 0.00490071 0.00490071" />
+        <joint name="front_left_wheel" type="hinge" pos="0 0 0" axis="0 1 0" damping="1.0" />
+        <geom size="0.0759 0.0395" quat="0.707107 0.707107 0 0" type="cylinder" contype="0" conaffinity="0" group="3" material="wheel_mat" />
+      </body>
+      <body name="front_right_wheel_link" pos="0.319 -0.2755 0.05">
+        <inertial pos="0 0 0" quat="0.707107 0 0 0.707107" mass="2.5" diaginertia="0.00720101 0.00490071 0.00490071" />
+        <joint name="front_right_wheel" type="hinge" pos="0 0 0" axis="0 1 0" damping="1.0" />
+        <geom size="0.0759 0.0395" quat="0.707107 0.707107 0 0" type="cylinder" contype="0" conaffinity="0" group="3" material="wheel_mat" />
+      </body>
+      <body name="rear_left_wheel_link" pos="-0.319 0.2755 0.05">
+        <inertial pos="0 0 0" quat="0.707107 0 0 0.707107" mass="2.5" diaginertia="0.00720101 0.00490071 0.00490071" />
+        <joint name="rear_left_wheel" type="hinge" pos="0 0 0" axis="0 1 0" damping="1.0" />
+        <geom size="0.0759 0.0395" quat="0.707107 0.707107 0 0" type="cylinder" contype="0" conaffinity="0" group="3" material="wheel_mat" />
+      </body>
+      <body name="rear_right_wheel_link" pos="-0.319 -0.2755 0.05">
+        <inertial pos="0 0 0" quat="0.707107 0 0 0.707107" mass="2.5" diaginertia="0.00720101 0.00490071 0.00490071" />
+        <joint name="rear_right_wheel" type="hinge" pos="0 0 0" axis="0 1 0" damping="1.0" />
+        <geom size="0.0759 0.0395" quat="0.707107 0.707107 0 0" type="cylinder" contype="0" conaffinity="0" group="3" material="wheel_mat" />
+      </body>
+
+      
+      
+      <body name="base" pos="0.23941 0 0.499" quat="0 0 0 1">
+        <inertial pos="0.00243205 0.00250861 0.05299306" mass="1.94219788" diaginertia="0.00434815 0.00446542 0.00446174" />
+        <body name="shoulder" pos="0 0 0.1105">
+          <inertial pos="1.2e-05 0.00048 0.039513" quat="0.70492 0.709283 0.00234996 0.000474112" mass="2.825469" diaginertia="0.0130691 0.0122423 0.00479258" />
+          <joint name="shoulder_rotation" type="hinge" pos="0 0 0" axis="0 0 1" range="-4.312389 4.312389" damping="1.0827" frictionloss="1.0158" armature="0.01400" />
+          <body name="upperarm" pos="0 0 0.047" quat="0.5 0.5 -0.5 0.5">
+            <inertial pos="0.20391301 -5.28e-06 -0.00015224" quat="-0.0149021 0.707245 -0.0149286 0.706654" mass="2.101466" diaginertia="0.050260258 0.050226661 0.001541072" />
+            <joint name="shoulder_flexion" type="hinge" pos="0 0 0" axis="0 0 1" range="-1.720796 1.720796" damping="0.6181" frictionloss="1.7316" armature="0.01400" />
+            <body name="elbow" pos="0.4127 0 0">
+              <inertial pos="0.00387586 -0.0780816 -0.000268953" quat="0.409575 0.532175 -0.486089 0.559245" mass="0.807718" diaginertia="0.0011199146 0.0010627022 0.00084585368" />
+              <joint name="elbow_flexion" type="hinge" pos="0 0 0" axis="0 0 1" range="0.0 3.091593" damping="0.0400" frictionloss="1.3690" armature="0.01400" />
+              <geom size="0.005 0.005 0.005" pos="0.0345 -0.1235 0" type="box" contype="0" conaffinity="0" group="1" density="0" material="dark_grey_mat" />
+              <geom size="0.005 0.005 0.005" pos="0.0345 -0.1235 0" type="box" group="3" density="0" />
+
+              
+              <body name="forearm" pos="0.0262 -0.0855 0" quat="0.70710678 0 0.70710678 0">
+                <inertial pos="-0.001568 4.6e-05 0.292163" quat="0.991226 0.000827245 0.00412985 0.13211" mass="1.310501" diaginertia="0.033197304 0.03319015 0.0010178966" />
+                <joint name="forearm_rotation" type="hinge" pos="0 0 0" axis="0 0 1" range="-4.712389 4.712389" damping="0.1136" frictionloss="0.4390" armature="0.00700" />
+                <body name="forearm_cable_trim" pos="0 0 0.20">
+                  <inertial pos="0 0 0" mass="0.196000" diaginertia="9.8e-06 9.8e-06 9.8e-06" />
+                </body>
+
+                
+                <body name="wrist_1" pos="0.0295 0 0.4207" quat="0.70710678 0 -0.70710678 0">
+                  <inertial pos="0.0796841 -5.03362e-05 0.0233124" quat="0.350128 0.613817 0.617751 0.344996" mass="1.128053" diaginertia="0.00086909144 0.0008364006 0.00057939168" />
+                  <joint name="wrist_flexion" type="hinge" pos="0 0 0" axis="0 0 1" range="-1.820796 1.820796" armature="0.00700" damping="0.0492" frictionloss="0.2273" />
+                  <geom size="0.005 0.005 0.005" pos="0.032 0 -0.017" type="box" contype="0" conaffinity="0" group="1" density="0" material="dark_grey_mat" />
+                  <geom size="0.005 0.005 0.005" pos="0.032 0 -0.017" type="box" group="3" density="0" />
+
+                  
+                  <body name="wrist_2" pos="0.117 0 0.0295" quat="0.70710678 0 0.70710678 0">
+                    <inertial pos="0.000447751 5.45596e-06 0.0035631" quat="-9.58344e-07 0.709291 2.61927e-06 0.704916" mass="0.047864" diaginertia="2.6578286e-05 1.4033992e-05 1.3513906e-05" />
+                    <joint name="wrist_rotation" type="hinge" pos="0 0 0" axis="0 0 1" range="-4.712389 4.712389" armature="0.00700" damping="0.0425" frictionloss="0.2529" />
+                    <body name="flange" pos="0 0 0.009" quat="0.70710678 0 0 0.70710678">
+                      
+                      <body name="gripper_coupling_mass" pos="0 0 0.01">
+                        <inertial pos="0 0 0" mass="0.235200" diaginertia="9.8e-06 9.8e-06 9.8e-06" />
+                      </body>
+                      <camera name="wrist_cam" pos="-0.0843 -0.0266 0.0856" quat="-0.00111 -0.69712 0.71695 -0.00274" fovy="51" />
+                      <body name="gripper_base" pos="0 0 0">
+                        <inertial pos="0 0 0.06" mass="0.891800" diaginertia="0.00196098 0.00196098 0.00098098" />
+                        
+                        <site name="ee_site" pos="0 0 0.1654" size="0.01" group="4" rgba="0.9 0.2 0.2 1" />
+                        
+                        <body name="gripper_camera_base_link" pos="0.003352 0.063032 0.051283" quat="0.493547 -0.508735 -0.492320 -0.505193">
+                          <inertial pos="0 0.015 0" quat="0.5 -0.5 -0.5 -0.5" mass="0.461580" diaginertia="0.0006713 0.00057036 0.00022442" />
+                          <geom size="0.0576 0.0325 0.0201" type="box" group="1" material="dark_grey_mat" contype="0" conaffinity="0" />
+                        </body>
+
+                        
+                        <body name="base_mount" quat="1 0 0 1">
+                          <body name="2f85_base" pos="0 0 0.0038" quat="1 0 0 -1">
+                            <site name="pinch" pos="0 0 0.145" size="0.005" group="4" />
+                            <body name="right_driver" pos="0 0.0306011 0.054904">
+                              <body name="right_coupler" pos="0 0.0315 -0.0041">
+                                </body>
+                            </body>
+                            <body name="right_spring_link" pos="0 0.0132 0.0609">
+                              <body name="right_follower" pos="0 0.055 0.0375">
+                                <body name="right_pad" pos="0 -0.0189 0.01352">
+                                  <body name="right_silicone_pad">
+                                    </body>
+                                </body>
+                              </body>
+                            </body>
+                            <body name="left_driver" pos="0 -0.0306011 0.054904" quat="0 0 0 1">
+                              <body name="left_coupler" pos="0 0.0315 -0.0041">
+                                </body>
+                            </body>
+                            <body name="left_spring_link" pos="0 -0.0132 0.0609" quat="0 0 0 1">
+                              <body name="left_follower" pos="0 0.055 0.0375">
+                                <body name="left_pad" pos="0 -0.0189 0.01352">
+                                  <body name="left_silicone_pad">
+                                    </body>
+                                </body>
+                              </body>
+                            </body>
+                          </body>
+                        </body>
+
+                        
+                        <body name="payload_body" pos="0 0 0.1654">
+                          <inertial pos="0 0 0" mass="0.0001" diaginertia="0.0001 0.0001 0.0001" />
+                          <geom name="payload_geom" type="cylinder" size="0.04 0.03" material="payload_mat" contype="0" conaffinity="0" group="4" />
+                        </body>
+                      </body>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <contact>
+    
+    <exclude body1="ridgeback_base" body2="base" />
+    <exclude body1="ridgeback_base" body2="shoulder" />
+    <exclude body1="ridgeback_base" body2="upperarm" />
+    <exclude body1="base" body2="upperarm" />
+    
+    <exclude body1="wrist_1" body2="flange" />
+    <exclude body1="wrist_1" body2="gripper_base" />
+    <exclude body1="wrist_1" body2="base_mount" />
+    <exclude body1="wrist_1" body2="2f85_base" />
+    <exclude body1="wrist_2" body2="flange" />
+    <exclude body1="wrist_2" body2="gripper_base" />
+    <exclude body1="wrist_2" body2="base_mount" />
+    <exclude body1="wrist_2" body2="2f85_base" />
+    
+    <exclude body1="2f85_base" body2="left_driver" />
+    <exclude body1="2f85_base" body2="right_driver" />
+    <exclude body1="2f85_base" body2="left_spring_link" />
+    <exclude body1="2f85_base" body2="right_spring_link" />
+    <exclude body1="right_coupler" body2="right_follower" />
+    <exclude body1="left_coupler" body2="left_follower" />
+  </contact>
+
+  <actuator>
+    
+    <velocity name="base_vx" joint="base_x" kv="5000" />
+    <velocity name="base_vy" joint="base_y" kv="5000" />
+    <velocity name="base_wz" joint="base_yaw" kv="2500" />
+
+    
+    <velocity name="fl_wheel_vel" joint="front_left_wheel" kv="100" />
+    <velocity name="fr_wheel_vel" joint="front_right_wheel" kv="100" />
+    <velocity name="rl_wheel_vel" joint="rear_left_wheel" kv="100" />
+    <velocity name="rr_wheel_vel" joint="rear_right_wheel" kv="100" />
+
+    
+    <motor name="dynaarm_tau_1" joint="shoulder_rotation" ctrlrange="-120 120" />
+    <motor name="dynaarm_tau_2" joint="shoulder_flexion" ctrlrange="-120 120" />
+    <motor name="dynaarm_tau_3" joint="elbow_flexion" ctrlrange="-120 120" />
+    <motor name="dynaarm_tau_4" joint="forearm_rotation" ctrlrange="-40 40" />
+    <motor name="dynaarm_tau_5" joint="wrist_flexion" ctrlrange="-40 40" />
+    <motor name="dynaarm_tau_6" joint="wrist_rotation" ctrlrange="-40 40" />
+  </actuator>
+
+  <sensor>
+    <accelerometer name="base_accel" site="imu_site" />
+    <gyro name="base_gyro" site="imu_site" />
+    <framelinvel name="base_linvel" objtype="body" objname="ridgeback_base" />
+    <frameangvel name="base_angvel" objtype="body" objname="ridgeback_base" />
+    <framepos name="ee_pos" objtype="site" objname="ee_site" />
+  </sensor>
+</mujoco>
