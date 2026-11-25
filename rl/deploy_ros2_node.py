@@ -380,11 +380,12 @@ def run_ros2_node(args):
             self.live_bl_R = None
             self.p0_bl = None
             self.R0_bl = None
+            self.node_init_time = time.monotonic()
 
             joint_topic = f"{prefix}/platform/joint_states"
             self.sub_js = self.create_subscription(JointState, joint_topic, self._on_joint_state, 10)
 
-            pose_bc_topic = f"{prefix}/pose_broadcaster/current_pose"
+            pose_bc_topic = f"{prefix}/current_pose"
             self.sub_pose_bc = self.create_subscription(PoseStamped, pose_bc_topic, self._on_current_pose, 10)
 
             if args.target_mode == "topic":
@@ -458,11 +459,14 @@ def run_ros2_node(args):
                 return
 
             if self.p0 is None:
+                # Give /current_pose up to 0.5s to arrive so we lock onto the exact Pinocchio tcp frame
+                if self.live_bl_p is None and (now - self.node_init_time) < 0.5:
+                    return
                 self.p0, self.R0 = self.core.forward_kinematics(self.q_now)
                 if self.live_bl_p is not None and self.live_bl_R is not None:
                     self.p0_bl = self.live_bl_p.copy()
                     self.R0_bl = self.live_bl_R.copy()
-                    src = "pose_broadcaster (exact base_link)"
+                    src = "/current_pose (exact Pinocchio tcp in base_link)"
                 else:
                     self.p0_bl = self.p0 - self.core.base_pos_world
                     self.R0_bl = self.R0.copy()
@@ -554,8 +558,14 @@ def run_ros2_node(args):
                 self.pub_twist.publish(tw_msg)
 
             if self.step_count % int(args.rate_hz * 2) == 0:
+                if self.live_bl_p is not None and self.live_bl_R is not None:
+                    disp_pos_mm = float(np.linalg.norm(p_bl - self.live_bl_p) * 1000.0)
+                    disp_ori_deg = float(np.degrees(np.linalg.norm(orientation_error_world(R_bl, self.live_bl_R))))
+                else:
+                    disp_pos_mm = out["pos_err_mm"]
+                    disp_ori_deg = out["ori_err_deg"]
                 self.get_logger().info(
-                    f"[t={t_rel:5.1f}s] PosErr={out['pos_err_mm']:5.1f}mm | OriErr={out['ori_err_deg']:4.1f}deg | "
+                    f"[t={t_rel:5.1f}s] PosErr={disp_pos_mm:5.1f}mm | OriErr={disp_ori_deg:4.1f}deg | "
                     f"|a_res|={np.linalg.norm(out['a_res_pos']):4.2f}m/s^2 | solve={out['solve_ms']:.2f}ms"
                 )
             self.step_count += 1
