@@ -33,6 +33,8 @@ Built-in Hardware Safety Guardrails:
 """
 
 import argparse
+import csv
+import datetime
 import json
 import os
 import sys
@@ -380,6 +382,7 @@ def run_ros2_node(args):
             self.joint_idx_map = {n: i for i, n in enumerate(JOINT_NAMES)}
             self.q_now = np.zeros(6, dtype=np.float64)
             self.dq_now = np.zeros(6, dtype=np.float64)
+            self.tau_now = np.zeros(6, dtype=np.float64)
             self.state_received = False
             self.last_state_time = 0.0
             self.start_time = None
@@ -387,6 +390,23 @@ def run_ros2_node(args):
             self.R0 = None
             self.faulted = False
             self.step_count = 0
+
+            # Optional 50 Hz telemetry logger (buffered in RAM, flushed on shutdown)
+            self.log_path = None
+            self.log_rows = []
+            if args.log_csv:
+                self.log_path = args.log_csv
+            elif args.log:
+                ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                log_dir = os.path.join(SIM_DIR, "logs")
+                os.makedirs(log_dir, exist_ok=True)
+                self.log_path = os.path.join(
+                    log_dir,
+                    f"{args.controller_mode}_{args.target_mode}_g{args.residual_gain:.2f}_s{args.speed_scale:.2f}_{ts}.csv",
+                )
+            if self.log_path:
+                os.makedirs(os.path.dirname(os.path.abspath(self.log_path)), exist_ok=True)
+                self.get_logger().info(f"Telemetry logging enabled -> {self.log_path}")
 
             # External topic target state
             self.ext_p = None
@@ -442,6 +462,8 @@ def run_ros2_node(args):
                         updated = True
                     if i < len(msg.velocity):
                         self.dq_now[idx] = msg.velocity[i]
+                    if i < len(msg.effort):
+                        self.tau_now[idx] = msg.effort[i]
             if updated:
                 self.last_state_time = time.monotonic()
                 self.state_received = True
@@ -490,7 +512,7 @@ def run_ros2_node(args):
                     src = "MuJoCo FK - base_z_offset"
                 self.start_time = now
                 self.get_logger().info(
-                    f"Captured startup pose ({src}): p0_bl={np.round(self.p0_bl, 3)}. Starting smooth 1.5s ramp-in."
+                    f"Captured startup pose ({src}): p0_bl={np.round(self.p0_bl, 3)}. Starting smooth 2.5s C^2 ramp-in."
                 )
 
             t_rel = now - self.start_time
@@ -574,18 +596,57 @@ def run_ros2_node(args):
                 tw_msg.twist.angular.x, tw_msg.twist.angular.y, tw_msg.twist.angular.z = out["w_crisp"].tolist()
                 self.pub_twist.publish(tw_msg)
 
+            if self.live_bl_p is not None and self.live_bl_R is not None:
+                p_ee_bl = self.live_bl_p
+                disp_pos_mm = float(np.linalg.norm(p_bl - p_ee_bl) * 1000.0)
+                disp_ori_deg = float(np.degrees(np.linalg.norm(orientation_error_world(R_bl, self.live_bl_R))))
+            else:
+                p_ee_bl = p_t - self.core.base_pos_world
+                disp_pos_mm = out["pos_err_mm"]
+                disp_ori_deg = out["ori_err_deg"]
+
+            if self.log_path is not None:
+                a_res_ori = (self.core.prev_action[3:] * self.core.action_scale_ori).astype(np.float64)
+                self.log_rows.append([
+                    t_rel,
+                    p_ee_bl[0], p_ee_bl[1], p_ee_bl[2],
+                    p_bl[0], p_bl[1], p_bl[2],
+                    disp_pos_mm, disp_ori_deg,
+                    *self.q_now.tolist(),
+                    *self.dq_now.tolist(),
+                    *self.tau_now.tolist(),
+                    *out["a_res_pos"].tolist(),
+                    *a_res_ori.tolist(),
+                    out["solve_ms"],
+                ])
+
             if self.step_count % int(args.rate_hz * 2) == 0:
-                if self.live_bl_p is not None and self.live_bl_R is not None:
-                    disp_pos_mm = float(np.linalg.norm(p_bl - self.live_bl_p) * 1000.0)
-                    disp_ori_deg = float(np.degrees(np.linalg.norm(orientation_error_world(R_bl, self.live_bl_R))))
-                else:
-                    disp_pos_mm = out["pos_err_mm"]
-                    disp_ori_deg = out["ori_err_deg"]
                 self.get_logger().info(
                     f"[t={t_rel:5.1f}s] PosErr={disp_pos_mm:5.1f}mm | OriErr={disp_ori_deg:4.1f}deg | "
                     f"|a_res|={np.linalg.norm(out['a_res_pos']):4.2f}m/s^2 | solve={out['solve_ms']:.2f}ms"
                 )
             self.step_count += 1
+
+        def flush_log(self):
+            if not self.log_path or not self.log_rows:
+                return
+            header = [
+                "t",
+                "p_ee_x", "p_ee_y", "p_ee_z",
+                "p_tgt_x", "p_tgt_y", "p_tgt_z",
+                "pos_err_mm", "ori_err_deg",
+                *[f"q_{i}" for i in range(6)],
+                *[f"dq_{i}" for i in range(6)],
+                *[f"tau_{i}" for i in range(6)],
+                *[f"a_res_{i}" for i in range(6)],
+                "solve_ms",
+            ]
+            with open(self.log_path, "w", newline="") as f:
+                w = csv.writer(f)
+                w.writerow(header)
+                w.writerows(self.log_rows)
+            print(f"\n[✓] Saved {len(self.log_rows)} samples to {self.log_path}")
+            print(f"    Analyze: python3 rl/analyze_deploy_log.py {self.log_path}")
 
     rclpy.init()
     node = DynaArmRLDeployNode()
@@ -594,6 +655,7 @@ def run_ros2_node(args):
     except KeyboardInterrupt:
         pass
     finally:
+        node.flush_log()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
@@ -610,6 +672,8 @@ def main():
     parser.add_argument("--speed-scale", type=float, default=0.4, help="Trajectory speed multiplier in [0.1, 1.0]")
     parser.add_argument("--rate-hz", type=float, default=50.0, help="Policy inference rate [Hz]")
     parser.add_argument("--max-vel", type=float, default=1.4, help="Max commanded joint velocity [rad/s]")
+    parser.add_argument("--log", action="store_true", help="Auto-save 50 Hz telemetry CSV into logs/")
+    parser.add_argument("--log-csv", type=str, default="", help="Custom output CSV path for 50 Hz telemetry")
     parser.add_argument("--self-test", action="store_true", help="Run offline timing & tracking verification")
     args = parser.parse_args()
 
