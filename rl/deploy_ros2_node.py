@@ -121,6 +121,9 @@ class RL6DPoseControllerCore:
         self.qpos_idx = np.array([self.nom_model.joint(n).qposadr[0] for n in JOINT_NAMES])
         self.qvel_idx = np.array([self.nom_model.joint(n).dofadr[0] for n in JOINT_NAMES])
         self.ee_site_id = self.nom_model.site("ee_site").id
+        self.base_body_id = self.nom_model.body("ridgeback_base").id
+        mujoco.mj_forward(self.nom_model, self.nom_data)
+        self.base_pos_world = self.nom_data.body("ridgeback_base").xpos.copy()
         self._jac_pos = np.zeros((3, self.nom_model.nv), dtype=np.float64)
         self._jac_rot = np.zeros((3, self.nom_model.nv), dtype=np.float64)
         self._max_joint_acc = np.array([15.0, 15.0, 15.0, 20.0, 20.0, 20.0], dtype=np.float64)
@@ -372,8 +375,17 @@ def run_ros2_node(args):
             self.ext_p = None
             self.ext_R = None
 
+            # Live base_link pose from pose_broadcaster (ensures 0.0 mm frame offset with C++ Pinocchio controller)
+            self.live_bl_p = None
+            self.live_bl_R = None
+            self.p0_bl = None
+            self.R0_bl = None
+
             joint_topic = f"{prefix}/platform/joint_states"
             self.sub_js = self.create_subscription(JointState, joint_topic, self._on_joint_state, 10)
+
+            pose_bc_topic = f"{prefix}/pose_broadcaster/current_pose"
+            self.sub_pose_bc = self.create_subscription(PoseStamped, pose_bc_topic, self._on_current_pose, 10)
 
             if args.target_mode == "topic":
                 tgt_topic = f"{prefix}/rl_target_pose"
@@ -416,6 +428,11 @@ def run_ros2_node(args):
                 self.last_state_time = time.monotonic()
                 self.state_received = True
 
+        def _on_current_pose(self, msg: PoseStamped):
+            self.live_bl_p = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z], dtype=np.float64)
+            q = msg.pose.orientation
+            self.live_bl_R = quat_xyzw_to_mat(q.x, q.y, q.z, q.w)
+
         def _on_target_pose(self, msg: PoseStamped):
             self.ext_p = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z], dtype=np.float64)
             q = msg.pose.orientation
@@ -442,17 +459,33 @@ def run_ros2_node(args):
 
             if self.p0 is None:
                 self.p0, self.R0 = self.core.forward_kinematics(self.q_now)
+                if self.live_bl_p is not None and self.live_bl_R is not None:
+                    self.p0_bl = self.live_bl_p.copy()
+                    self.R0_bl = self.live_bl_R.copy()
+                    src = "pose_broadcaster (exact base_link)"
+                else:
+                    self.p0_bl = self.p0 - self.core.base_pos_world
+                    self.R0_bl = self.R0.copy()
+                    src = "MuJoCo FK - base_z_offset"
                 self.start_time = now
-                self.get_logger().info(f"Captured startup EE pose p0={np.round(self.p0, 3)}. Starting smooth ramp-in.")
+                self.get_logger().info(
+                    f"Captured startup pose ({src}): p0_bl={np.round(self.p0_bl, 3)}. Starting smooth 1.5s ramp-in."
+                )
 
             t_rel = now - self.start_time
             if args.target_mode == "topic":
                 if self.ext_p is None:
-                    p_t, v_t, a_t, R_t, w_t, al_t = self.p0, np.zeros(3), np.zeros(3), self.R0, np.zeros(3), np.zeros(3)
+                    p_bl, v_t, a_t, R_bl, w_t, al_t = self.p0_bl, np.zeros(3), np.zeros(3), self.R0_bl, np.zeros(3), np.zeros(3)
                 else:
-                    p_t, v_t, a_t, R_t, w_t, al_t = self.ext_p, np.zeros(3), np.zeros(3), self.ext_R, np.zeros(3), np.zeros(3)
+                    p_bl, v_t, a_t, R_bl, w_t, al_t = self.ext_p, np.zeros(3), np.zeros(3), self.ext_R, np.zeros(3), np.zeros(3)
+                p_t = self.p0 + (p_bl - self.p0_bl)
+                R_t = (R_bl @ self.R0_bl.T) @ self.R0
             else:
-                p_t, v_t, a_t, R_t, w_t, al_t = compute_analytic_target(
+                # Generate identical delta in both base_link (for C++ Pinocchio controller) and MuJoCo world (for RL obs)
+                p_bl, v_t, a_t, R_bl, w_t, al_t = compute_analytic_target(
+                    args.target_mode, t_rel, self.p0_bl, self.R0_bl, speed_scale=args.speed_scale
+                )
+                p_t, _, _, R_t, _, _ = compute_analytic_target(
                     args.target_mode, t_rel, self.p0, self.R0, speed_scale=args.speed_scale
                 )
 
@@ -480,8 +513,8 @@ def run_ros2_node(args):
                 p_msg = PoseStamped()
                 p_msg.header.stamp = stamp
                 p_msg.header.frame_id = "base_link"
-                p_msg.pose.position.x, p_msg.pose.position.y, p_msg.pose.position.z = p_t.tolist()
-                qx, qy, qz, qw = mat_to_quat_xyzw(R_t)
+                p_msg.pose.position.x, p_msg.pose.position.y, p_msg.pose.position.z = p_bl.tolist()
+                qx, qy, qz, qw = mat_to_quat_xyzw(R_bl)
                 p_msg.pose.orientation.x, p_msg.pose.orientation.y, p_msg.pose.orientation.z, p_msg.pose.orientation.w = qx, qy, qz, qw
                 self.pub_pose.publish(p_msg)
 
