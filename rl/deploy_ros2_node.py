@@ -268,42 +268,59 @@ class RL6DPoseControllerCore:
 
 
 def compute_analytic_target(mode: str, t: float, p0: np.ndarray, R0: np.ndarray, speed_scale: float = 0.5):
-    """Hardware-safe, IK-feasible analytic trajectories anchored smoothly at (p0, R0)."""
-    ramp = min(1.0, max(0.0, t) / 1.5)
-    s = 3 * ramp**2 - 2 * ramp**3
+    """Hardware-safe, IK-feasible analytic trajectories with C^2 quintic 2.5s ramp-in."""
+    T_ramp = 2.5
+    if t <= 0.0:
+        s, ds, dds = 0.0, 0.0, 0.0
+    elif t >= T_ramp:
+        s, ds, dds = 1.0, 0.0, 0.0
+    else:
+        r = t / T_ramp
+        s = 10.0 * r**3 - 15.0 * r**4 + 6.0 * r**5
+        ds = (30.0 * r**2 - 60.0 * r**3 + 30.0 * r**4) / T_ramp
+        dds = (60.0 * r - 180.0 * r**2 + 120.0 * r**3) / (T_ramp**2)
+
     sc = float(np.clip(speed_scale, 0.1, 1.0))
 
     if mode == "helix":
         w = 1.6 * sc
         wz = 0.65 * sc
         r = 0.075
-        p = p0 + s * np.array([r * (np.cos(w * t) - 1.0), r * np.sin(w * t), 0.08 * np.sin(wz * t)])
-        v = s * np.array([-r * w * np.sin(w * t), r * w * np.cos(w * t), 0.08 * wz * np.cos(wz * t)])
-        a = s * np.array([-r * w**2 * np.cos(w * t), -r * w**2 * np.sin(w * t), -0.08 * wz**2 * np.sin(wz * t)])
+        dp = np.array([r * (np.cos(w * t) - 1.0), r * np.sin(w * t), 0.08 * np.sin(wz * t)])
+        dv = np.array([-r * w * np.sin(w * t), r * w * np.cos(w * t), 0.08 * wz * np.cos(wz * t)])
+        da = np.array([-r * w**2 * np.cos(w * t), -r * w**2 * np.sin(w * t), -0.08 * wz**2 * np.sin(wz * t)])
         axis = np.array([0.0, 1.0, 0.0])
         amp, wo = 0.15, 1.2 * sc
     elif mode == "circle":
         w = 1.4 * sc
         r = 0.08
-        p = p0 + s * np.array([0.025 * np.sin(w * t), r * np.sin(w * t), r * (np.cos(w * t) - 1.0)])
-        v = s * np.array([0.025 * w * np.cos(w * t), r * w * np.cos(w * t), -r * w * np.sin(w * t)])
-        a = s * np.array([-0.025 * w**2 * np.sin(w * t), -r * w**2 * np.sin(w * t), -r * w**2 * np.cos(w * t)])
+        dp = np.array([0.025 * np.sin(w * t), r * np.sin(w * t), r * (np.cos(w * t) - 1.0)])
+        dv = np.array([0.025 * w * np.cos(w * t), r * w * np.cos(w * t), -r * w * np.sin(w * t)])
+        da = np.array([-0.025 * w**2 * np.sin(w * t), -r * w**2 * np.sin(w * t), -r * w**2 * np.cos(w * t)])
         axis = np.array([1.0, 0.0, 0.0])
         amp, wo = 0.15, 1.4 * sc
     elif mode == "figure8":
         w = 1.3 * sc
         rx, ry, rz = -0.025, 0.12, 0.06
-        p = p0 + s * np.array([rx * (1.0 - np.cos(w * t)), ry * np.sin(w * t), rz * np.sin(2 * w * t)])
-        v = s * np.array([rx * w * np.sin(w * t), ry * w * np.cos(w * t), 2 * rz * w * np.cos(2 * w * t)])
-        a = s * np.array([rx * w**2 * np.cos(w * t), -ry * w**2 * np.sin(w * t), -4 * rz * w**2 * np.sin(2 * w * t)])
+        dp = np.array([rx * (1.0 - np.cos(w * t)), ry * np.sin(w * t), rz * np.sin(2 * w * t)])
+        dv = np.array([rx * w * np.sin(w * t), ry * w * np.cos(w * t), 2 * rz * w * np.cos(2 * w * t)])
+        da = np.array([rx * w**2 * np.cos(w * t), -ry * w**2 * np.sin(w * t), -4 * rz * w**2 * np.sin(2 * w * t)])
         axis = np.array([0.0, 0.0, 1.0])
         amp, wo = 0.14, 1.3 * sc
     else:
         return p0.copy(), np.zeros(3), np.zeros(3), R0.copy(), np.zeros(3), np.zeros(3)
 
-    ang = s * amp * np.sin(wo * t)
-    dang = s * amp * wo * np.cos(wo * t)
-    ddang = -s * amp * (wo**2) * np.sin(wo * t)
+    # Exact product-rule derivatives so (p, v, a) are 100% consistent during startup ramp
+    p = p0 + s * dp
+    v = s * dv + ds * dp
+    a = s * da + 2.0 * ds * dv + dds * dp
+
+    th = amp * np.sin(wo * t)
+    dth = amp * wo * np.cos(wo * t)
+    ddth = -amp * (wo**2) * np.sin(wo * t)
+    ang = s * th
+    dang = s * dth + ds * th
+    ddang = s * ddth + 2.0 * ds * dth + dds * th
     R = rotvec_to_mat(ang * axis) @ R0
     return p, v, a, R, dang * axis, ddang * axis
 
