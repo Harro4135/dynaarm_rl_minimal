@@ -59,8 +59,8 @@ from dynaarm_reach_env import (
     solve_box_qp_6d,
 )
 
-DEFAULT_MODEL = os.path.join(RL_DIR, "checkpoints", "stribeck_pose6d_qp", "policy_deploy.ts")
-DEFAULT_META = os.path.join(RL_DIR, "checkpoints", "stribeck_pose6d_qp", "policy_deploy_meta.json")
+DEFAULT_MODEL = os.path.join(RL_DIR, "checkpoints", "stribeck_pose6d_pvtp", "policy_deploy.ts")
+DEFAULT_META = os.path.join(RL_DIR, "checkpoints", "stribeck_pose6d_pvtp", "policy_deploy_meta.json")
 
 
 def quat_xyzw_to_mat(qx: float, qy: float, qz: float, qw: float) -> np.ndarray:

@@ -1,0 +1,12 @@
+{
+  "source_checkpoint": "/home/harrison/Repos/ridgeback_duatic_sim/rl/checkpoints/stribeck_pose6d_pvtp/best_policy.pt",
+  "torchscript_path": "/home/harrison/Repos/ridgeback_duatic_sim/rl/checkpoints/stribeck_pose6d_pvtp/policy_deploy.ts",
+  "obs_dim": 39,
+  "action_dim": 6,
+  "action_scale": 3.0,
+  "action_scale_ori": 5.0,
+  "action_lpf_alpha": 0.5,
+  "control_freq_hz": 50.0,
+  "squashed_tanh": true,
+  "max_export_diff": 0.0
+}
