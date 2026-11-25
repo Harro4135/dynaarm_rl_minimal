@@ -386,12 +386,11 @@ def run_ros2_node(args):
                 self.pub_jtc = self.create_publisher(JointTrajectory, cmd_topic, 10)
                 self.get_logger().info(f"Publishing JointTrajectory to: {cmd_topic}")
             elif self.mode == "qp_osc":
-                ctrl_prefix = f"{prefix}/qp_osc_rl_controller"
-                self.pub_pose = self.create_publisher(PoseStamped, f"{ctrl_prefix}/target_pose", 10)
-                self.pub_twist = self.create_publisher(TwistStamped, f"{ctrl_prefix}/target_twist", 10)
-                self.pub_accel = self.create_publisher(AccelStamped, f"{ctrl_prefix}/target_accel", 10)
-                self.pub_res = self.create_publisher(Float64MultiArray, f"{ctrl_prefix}/rl_residual", 10)
-                self.get_logger().info(f"Streaming 50 Hz target + RL residual to C++ 500 Hz {ctrl_prefix}/*")
+                self.pub_pose = self.create_publisher(PoseStamped, f"{prefix}/target_pose", 10)
+                self.pub_twist = self.create_publisher(TwistStamped, f"{prefix}/target_twist", 10)
+                self.pub_accel = self.create_publisher(AccelStamped, f"{prefix}/target_accel", 10)
+                self.pub_res = self.create_publisher(Float64MultiArray, f"{prefix}/rl_residual", 10)
+                self.get_logger().info(f"Streaming 50 Hz target + RL residual to C++ 500 Hz {prefix}/{{target_pose,target_twist,target_accel,rl_residual}}")
             else:
                 self.pub_pose = self.create_publisher(PoseStamped, f"{prefix}/target_pose", 10)
                 self.pub_twist = self.create_publisher(TwistStamped, f"{prefix}/target_twist", 10)
@@ -457,7 +456,8 @@ def run_ros2_node(args):
                     args.target_mode, t_rel, self.p0, self.R0, speed_scale=args.speed_scale
                 )
 
-            out = self.core.compute_step(self.q_now, self.dq_now, p_t, v_t, a_t, R_t, w_t, al_t, preview_steps=3)
+            p_steps = 3 if self.mode == "jtc" else 0
+            out = self.core.compute_step(self.q_now, self.dq_now, p_t, v_t, a_t, R_t, w_t, al_t, preview_steps=p_steps)
 
             if out["pos_err_mm"] > 150.0:
                 self.faulted = True
@@ -535,7 +535,8 @@ def run_ros2_node(args):
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 def main():
