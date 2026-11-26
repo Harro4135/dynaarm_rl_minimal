@@ -47,7 +47,7 @@ class HardwareBenchmarkRunner:
         self.ns = args.robot_ns.strip("/")
         self.prefix = f"/{self.ns}" if self.ns else ""
         self.cm = f"{self.prefix}/controller_manager"
-        self.active_controller = "joint_trajectory_controller"
+        self.active_controller: str | None = None
         self.current_c_residual_gain: float | None = None
 
         import rclpy
