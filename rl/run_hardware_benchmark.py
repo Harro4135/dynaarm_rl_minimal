@@ -112,9 +112,17 @@ class HardwareBenchmarkRunner:
         self.active_controller = "joint_trajectory_controller"
         self.spin_for(0.5)
 
+    def ensure_qp_osc_loaded(self):
+        res = run_cmd(["ros2", "control", "list_controllers", "-c", self.cm], capture=True, check=False)
+        if "qp_osc_rl_controller" not in (res.stdout or ""):
+            print("[*] qp_osc_rl_controller not loaded yet — loading into controller_manager...")
+            run_cmd(["ros2", "control", "load_controller", "-c", self.cm, "qp_osc_rl_controller"])
+            time.sleep(0.5)
+
     def configure_and_switch_to_qp_osc(self, residual_gain: float):
         # Ensure JTC + gravity comp hold the arm before reconfiguring qp_osc_rl_controller
         self.switch_to_jtc()
+        self.ensure_qp_osc_loaded()
 
         if self.current_c_residual_gain is None or abs(self.current_c_residual_gain - residual_gain) > 1e-6:
             print(f"[*] Configuring qp_osc_rl_controller residual_gain={residual_gain:.2f} (while JTC holds arm)...")
