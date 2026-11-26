@@ -51,6 +51,7 @@ class HardwareBenchmarkRunner:
         self.current_c_residual_gain: float | None = None
 
         import rclpy
+        from geometry_msgs.msg import PoseStamped
         from rclpy.node import Node
         from sensor_msgs.msg import JointState
         from trajectory_msgs.msg import JointTrajectory
@@ -63,10 +64,16 @@ class HardwareBenchmarkRunner:
         self.joint_idx_map = {n: i for i, n in enumerate(JOINT_NAMES)}
         self.q_now = np.zeros(6, dtype=np.float64)
         self.dq_now = np.zeros(6, dtype=np.float64)
+        self.tau_now = np.zeros(6, dtype=np.float64)
+        self.live_bl_p = None
+        self.live_bl_R = None
         self.state_received = False
 
         self.sub_js = self.node.create_subscription(
             JointState, f"{self.prefix}/platform/joint_states", self._on_js, 10
+        )
+        self.sub_pose = self.node.create_subscription(
+            PoseStamped, f"{self.prefix}/current_pose", self._on_pose, 10
         )
         self.pub_jtc = self.node.create_publisher(
             JointTrajectory, f"{self.prefix}/joint_trajectory_controller/joint_trajectory", 10
@@ -82,8 +89,16 @@ class HardwareBenchmarkRunner:
                     updated = True
                 if i < len(msg.velocity):
                     self.dq_now[idx] = msg.velocity[i]
+                if i < len(msg.effort):
+                    self.tau_now[idx] = msg.effort[i]
         if updated:
             self.state_received = True
+
+    def _on_pose(self, msg):
+        from deploy_ros2_node import quat_xyzw_to_mat
+        self.live_bl_p = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z], dtype=np.float64)
+        q = msg.pose.orientation
+        self.live_bl_R = quat_xyzw_to_mat(q.x, q.y, q.z, q.w)
 
     def spin_for(self, seconds: float):
         t_end = time.monotonic() + seconds
@@ -183,11 +198,125 @@ class HardwareBenchmarkRunner:
         print(f"[✓] Reposition complete (max joint err={final_err:.4f} rad). Settling {self.args.settle_time:.1f}s...")
         self.spin_for(self.args.settle_time)
 
+    def run_native_jtc_trial(self, traj: str, csv_path: str):
+        """
+        Precompute the full smooth IK joint trajectory and send ONE single JointTrajectory
+        message to joint_trajectory_controller (no 50 Hz spline preemption, factory default gains!),
+        while logging 50 Hz telemetry identical to deploy_ros2_node.py.
+        """
+        import csv
+        import mujoco
+        from builtin_interfaces.msg import Duration
+        from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+        from deploy_ros2_node import compute_analytic_target
+        from dynaarm_reach_env import SAFE_LIMITS_HIGH, SAFE_LIMITS_LOW, orientation_error_world
+
+        self.switch_to_jtc()
+        self.spin_for(0.2)
+
+        xml_path = os.path.join(REPO_DIR, "models", "ridgeback_duatic_kinematics.xml")
+        model = mujoco.MjModel.from_xml_path(xml_path)
+        data = mujoco.MjData(model)
+        qpos_idx = np.array([model.joint(n).qposadr[0] for n in JOINT_NAMES])
+        qvel_idx = np.array([model.joint(n).dofadr[0] for n in JOINT_NAMES])
+        ee_site_id = model.site("ee_site").id
+        jac_p = np.zeros((3, model.nv), dtype=np.float64)
+        jac_r = np.zeros((3, model.nv), dtype=np.float64)
+
+        q_sim = self.q_now.copy()
+        data.qpos[:] = 0.0
+        data.qpos[qpos_idx] = q_sim
+        mujoco.mj_forward(model, data)
+        p0_mj = data.site_xpos[ee_site_id].copy()
+        R0_mj = data.site_xmat[ee_site_id].reshape(3, 3).copy()
+        p0_bl = self.live_bl_p.copy() if self.live_bl_p is not None else p0_mj.copy()
+        R0_bl = self.live_bl_R.copy() if self.live_bl_R is not None else R0_mj.copy()
+
+        # Precompute smooth 500 Hz CLIK -> downsample to clean 10 Hz spline waypoints for JTC
+        dt_ik = 0.002
+        n_steps = int(round(self.args.duration / dt_ik))
+        waypoint_stride = 50  # 0.1s (10 Hz) knots -> silky C^2 spline inside JTC
+        q_lo = SAFE_LIMITS_LOW + 0.05
+        q_hi = SAFE_LIMITS_HIGH - 0.05
+
+        msg = JointTrajectory()
+        msg.joint_names = list(JOINT_NAMES)
+        for k in range(1, n_steps + 1):
+            t_k = k * dt_ik
+            p_t, v_t, _, R_t, w_t, _ = compute_analytic_target(traj, t_k, p0_mj, R0_mj, speed_scale=self.args.speed_scale)
+            data.qpos[:] = 0.0
+            data.qpos[qpos_idx] = q_sim
+            mujoco.mj_forward(model, data)
+            p_c = data.site_xpos[ee_site_id].copy()
+            R_c = data.site_xmat[ee_site_id].reshape(3, 3).copy()
+            jac_p.fill(0.0); jac_r.fill(0.0)
+            mujoco.mj_jacSite(model, data, jac_p, jac_r, ee_site_id)
+            J6 = np.vstack([jac_p[:, qvel_idx], jac_r[:, qvel_idx]])
+            v6 = np.concatenate([v_t + 15.0 * (p_t - p_c), w_t + 8.0 * orientation_error_world(R_t, R_c).astype(np.float64)])
+            sv = float(np.linalg.svd(J6, compute_uv=False)[-1])
+            lam = 0.025 + 0.12 * np.exp(-((sv / 0.035) ** 2))
+            H = J6.T @ J6 + (lam ** 2) * np.eye(6)
+            dq_k = np.clip(np.linalg.solve(H, J6.T @ v6 + (lam ** 2) * 4.0 * (HOME_POSITION - q_sim)), -1.5, 1.5)
+            q_sim = np.clip(q_sim + dq_k * dt_ik, q_lo, q_hi)
+
+            if k % waypoint_stride == 0 or k == n_steps:
+                pt = JointTrajectoryPoint()
+                pt.positions = q_sim.tolist()
+                pt.velocities = (np.zeros(6) if k == n_steps else dq_k).tolist()
+                pt.time_from_start = Duration(sec=int(t_k), nanosec=int((t_k - int(t_k)) * 1e9))
+                msg.points.append(pt)
+
+        if not self.args.no_pause:
+            input(f"\n>>> Ready to run [{traj} | jtc (single smooth spline, {len(msg.points)} knots) | "
+                  f"speed={self.args.speed_scale:.2f} | {self.args.duration:.0f}s]. "
+                  f"Keep thumb on E-stop and press ENTER to start... ")
+
+        print(f"\n[*] Publishing single smooth JointTrajectory ({len(msg.points)} knots, {self.args.duration:.1f}s) -> {csv_path}")
+        t_start = time.monotonic()
+        self.pub_jtc.publish(msg)
+
+        rows = []
+        next_sample = t_start
+        while True:
+            now = time.monotonic()
+            t_rel = now - t_start
+            if t_rel >= self.args.duration:
+                break
+            self.rclpy.spin_once(self.node, timeout_sec=0.005)
+            if now >= next_sample:
+                p_bl, _, _, R_bl, _, _ = compute_analytic_target(traj, t_rel, p0_bl, R0_bl, speed_scale=self.args.speed_scale)
+                if self.live_bl_p is not None and self.live_bl_R is not None:
+                    p_ee = self.live_bl_p
+                    pos_mm = float(np.linalg.norm(p_bl - p_ee) * 1000.0)
+                    ori_deg = float(np.degrees(np.linalg.norm(orientation_error_world(R_bl, self.live_bl_R))))
+                else:
+                    p_ee = p_bl
+                    pos_mm = 0.0
+                    ori_deg = 0.0
+                rows.append([
+                    t_rel, p_ee[0], p_ee[1], p_ee[2], p_bl[0], p_bl[1], p_bl[2],
+                    pos_mm, ori_deg, *self.q_now.tolist(), *self.dq_now.tolist(), *self.tau_now.tolist(),
+                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                ])
+                next_sample += 0.02
+
+        header = [
+            "t", "p_ee_x", "p_ee_y", "p_ee_z", "p_tgt_x", "p_tgt_y", "p_tgt_z",
+            "pos_err_mm", "ori_err_deg",
+            *[f"q_{i}" for i in range(6)], *[f"dq_{i}" for i in range(6)],
+            *[f"tau_{i}" for i in range(6)], *[f"a_res_{i}" for i in range(6)], "solve_ms",
+        ]
+        with open(csv_path, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(header)
+            w.writerows(rows)
+        print(f"[✓] Saved {len(rows)} native-JTC samples to {csv_path}")
+        self.spin_for(0.5)
+
     def run_trial(self, traj: str, method: str, csv_path: str):
         if method == "jtc":
-            ctrl_mode = "jtc"
-            py_gain = 0.0
-            self.switch_to_jtc()
+            self.run_native_jtc_trial(traj, csv_path)
+            return
         elif method == "qp_osc_base":
             ctrl_mode = "qp_osc"
             py_gain = 0.0
@@ -295,8 +424,12 @@ def main():
         print(f"[*] Home joint pose (rad): {np.round(q_home, 3).tolist()}")
         print(f"[*] Plan                 : trajectories={args.trajectories} x methods={args.methods}")
 
-        for traj in args.trajectories:
-            for method in args.methods:
+        # Run all JTC trials FIRST (before qp_osc_rl_controller ever modifies onboard PID gains)
+        # so JTC runs with 100% untouched factory/default hardware gains!
+        ordered_methods = ([m for m in args.methods if m == "jtc"] +
+                           [m for m in args.methods if m != "jtc"])
+        for method in ordered_methods:
+            for traj in args.trajectories:
                 print("\n" + "=" * 78)
                 print(f"TRIAL: trajectory={traj} | method={method} | speed={args.speed_scale:.2f}")
                 print("=" * 78)
