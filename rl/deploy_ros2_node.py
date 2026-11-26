@@ -516,6 +516,13 @@ def run_ros2_node(args):
                 )
 
             t_rel = now - self.start_time
+            if args.duration > 0.0 and t_rel >= args.duration:
+                self.get_logger().info(f"Reached --duration {args.duration:.1f}s. Stopping cleanly.")
+                self.faulted = True
+                if rclpy.ok():
+                    rclpy.shutdown()
+                return
+
             if args.target_mode == "topic":
                 if self.ext_p is None:
                     p_bl, v_t, a_t, R_bl, w_t, al_t = self.p0_bl, np.zeros(3), np.zeros(3), self.R0_bl, np.zeros(3), np.zeros(3)
@@ -674,6 +681,7 @@ def main():
     parser.add_argument("--max-vel", type=float, default=1.4, help="Max commanded joint velocity [rad/s]")
     parser.add_argument("--log", action="store_true", help="Auto-save 50 Hz telemetry CSV into logs/")
     parser.add_argument("--log-csv", type=str, default="", help="Custom output CSV path for 50 Hz telemetry")
+    parser.add_argument("--duration", type=float, default=0.0, help="Auto-stop cleanly after N seconds (0 = run until Ctrl+C)")
     parser.add_argument("--self-test", action="store_true", help="Run offline timing & tracking verification")
     args = parser.parse_args()
 

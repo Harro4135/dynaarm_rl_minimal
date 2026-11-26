@@ -156,7 +156,22 @@ def analyze_file(path: str):
     except ImportError:
         pass
 
-    return {"pos_rms": float(np.sqrt(np.mean(pos_err[ss]**2))), "cart_jerk_rms": float(np.sqrt(np.mean(j_ee_norm[ss]**2)))}
+    return {
+        "file": os.path.basename(path),
+        "duration_s": float(t[-1]),
+        "pos_mean": float(np.mean(pos_err[ss])),
+        "pos_p95": float(np.percentile(pos_err[ss], 95)),
+        "pos_max": float(np.max(pos_err[ss])),
+        "ori_mean": float(np.mean(ori_err[ss])),
+        "ori_p95": float(np.percentile(ori_err[ss], 95)),
+        "ori_max": float(np.max(ori_err[ss])),
+        "cart_jerk_rms": float(np.sqrt(np.mean(j_ee_norm[ss] ** 2))),
+        "joint_jerk_rms": float(np.sqrt(np.mean(dddq_norm[ss] ** 2))),
+        "startup_jerk_max": float(np.max(dddq_norm[start])),
+        "dtau_rms": float(np.sqrt(np.mean(dtau_dt[ss] ** 2))),
+        "f_dq": f_dq,
+        "f_tau": f_tau,
+    }
 
 
 def main():
