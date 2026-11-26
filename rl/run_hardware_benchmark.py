@@ -102,18 +102,18 @@ class HardwareBenchmarkRunner:
     def switch_to_jtc(self):
         if self.active_controller == "joint_trajectory_controller":
             return
-        print("[*] Switching controllers: qp_osc_rl_controller -> joint_trajectory_controller")
+        print("[*] Switching controllers: qp_osc_rl_controller -> joint_trajectory_controller + gravity_compensation_controller")
         run_cmd([
             "ros2", "control", "switch_controllers", "-c", self.cm,
-            "--activate", "joint_trajectory_controller",
-            "--deactivate", "qp_osc_rl_controller",
+            "--activate", "joint_trajectory_controller", "gravity_compensation_controller",
+            "--deactivate", "qp_osc_rl_controller", "freeze_controller",
             "--best-effort",
         ])
         self.active_controller = "joint_trajectory_controller"
         self.spin_for(0.5)
 
     def configure_and_switch_to_qp_osc(self, residual_gain: float):
-        # Ensure JTC is holding the arm before reconfiguring qp_osc_rl_controller
+        # Ensure JTC + gravity comp hold the arm before reconfiguring qp_osc_rl_controller
         self.switch_to_jtc()
 
         if self.current_c_residual_gain is None or abs(self.current_c_residual_gain - residual_gain) > 1e-6:
@@ -137,11 +137,11 @@ class HardwareBenchmarkRunner:
             ])
             self.current_c_residual_gain = residual_gain
 
-        print("[*] Switching controllers: joint_trajectory_controller -> qp_osc_rl_controller")
+        print("[*] Switching controllers: joint_trajectory_controller + gravity_compensation_controller -> qp_osc_rl_controller")
         run_cmd([
             "ros2", "control", "switch_controllers", "-c", self.cm,
             "--activate", "qp_osc_rl_controller",
-            "--deactivate", "joint_trajectory_controller",
+            "--deactivate", "joint_trajectory_controller", "gravity_compensation_controller", "freeze_controller",
             "--best-effort",
         ])
         self.active_controller = "qp_osc_rl_controller"
