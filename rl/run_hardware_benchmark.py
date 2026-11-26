@@ -114,36 +114,23 @@ class HardwareBenchmarkRunner:
 
     def ensure_qp_osc_loaded(self):
         res = run_cmd(["ros2", "control", "list_controllers", "-c", self.cm], capture=True, check=False)
-        if "qp_osc_rl_controller" not in (res.stdout or ""):
-            print("[*] qp_osc_rl_controller not loaded yet — loading into controller_manager...")
+        out = res.stdout or ""
+        if "qp_osc_rl_controller" not in out:
+            print("[*] qp_osc_rl_controller not loaded yet — loading & configuring...")
             run_cmd(["ros2", "control", "load_controller", "-c", self.cm, "qp_osc_rl_controller"])
-            time.sleep(0.5)
+            time.sleep(0.3)
+            run_cmd(["ros2", "param", "set", f"{self.prefix}/qp_osc_rl_controller", "residual_gain", "1.0"])
+            run_cmd(["ros2", "control", "set_controller_state", "-c", self.cm, "qp_osc_rl_controller", "inactive"])
+            self.current_c_residual_gain = 1.0
+        elif "unconfigured" in [line for line in out.splitlines() if "qp_osc_rl_controller" in line][0]:
+            run_cmd(["ros2", "param", "set", f"{self.prefix}/qp_osc_rl_controller", "residual_gain", "1.0"])
+            run_cmd(["ros2", "control", "set_controller_state", "-c", self.cm, "qp_osc_rl_controller", "inactive"])
+            self.current_c_residual_gain = 1.0
 
     def configure_and_switch_to_qp_osc(self, residual_gain: float):
-        # Ensure JTC + gravity comp hold the arm before reconfiguring qp_osc_rl_controller
+        # Ensure JTC + gravity comp hold the arm; keep C++ residual_gain=1.0 and gate via Python --residual-gain
         self.switch_to_jtc()
         self.ensure_qp_osc_loaded()
-
-        if self.current_c_residual_gain is None or abs(self.current_c_residual_gain - residual_gain) > 1e-6:
-            print(f"[*] Configuring qp_osc_rl_controller residual_gain={residual_gain:.2f} (while JTC holds arm)...")
-            run_cmd([
-                "ros2", "control", "set_controller_state", "-c", self.cm,
-                "qp_osc_rl_controller", "unconfigured",
-            ], check=False)
-            run_cmd([
-                "ros2", "param", "set", f"{self.prefix}/qp_osc_rl_controller",
-                "residual_gain", f"{residual_gain:.3f}",
-            ])
-            res = run_cmd([
-                "ros2", "param", "get", f"{self.prefix}/qp_osc_rl_controller",
-                "residual_gain",
-            ], capture=True)
-            print(f"    Verified: {res.stdout.strip()}")
-            run_cmd([
-                "ros2", "control", "set_controller_state", "-c", self.cm,
-                "qp_osc_rl_controller", "inactive",
-            ])
-            self.current_c_residual_gain = residual_gain
 
         print("[*] Switching controllers: joint_trajectory_controller + gravity_compensation_controller -> qp_osc_rl_controller")
         run_cmd([
